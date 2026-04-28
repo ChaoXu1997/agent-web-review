@@ -1,0 +1,209 @@
+/* content.css — Scoped styles for Agent Web Review overlay
+   All rules prefixed with #awr-root to avoid host page conflicts */
+
+#awr-root {
+  all: initial;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1a1a2e;
+  direction: ltr;
+  text-align: left;
+  visibility: visible;
+  box-sizing: border-box;
+}
+
+#awr-root *,
+#awr-root *::before,
+#awr-root *::after {
+  box-sizing: border-box;
+}
+
+/* Highlight overlay */
+#awr-root .awr-hl {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid rgba(74, 144, 217, 0.85);
+  background: rgba(74, 144, 217, 0.12);
+  border-radius: 3px;
+  display: none;
+  transition: top 0.05s, left 0.05s, width 0.05s, height 0.05s;
+}
+
+#awr-root .awr-hl-label {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(74, 144, 217, 0.92);
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 3px 3px 3px 0;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  display: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+/* Markers */
+#awr-root .awr-marker {
+  position: fixed;
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #4A90D9;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  transition: transform 0.12s ease;
+  z-index: 2147483647;
+}
+
+#awr-root .awr-marker:hover {
+  transform: scale(1.25);
+}
+
+#awr-root .awr-marker--orphan {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* Marker tooltip */
+#awr-root .awr-marker-tip {
+  position: fixed;
+  pointer-events: none;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 260px;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  z-index: 2147483647;
+}
+
+/* Comment panel */
+#awr-root .awr-panel {
+  position: fixed;
+  pointer-events: auto;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
+  padding: 14px;
+  display: none;
+  z-index: 2147483647;
+}
+
+#awr-root .awr-panel-el {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#awr-root .awr-panel-sel {
+  color: #4A90D9;
+  font-weight: 500;
+}
+
+#awr-root .awr-panel-ta {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  resize: vertical;
+  min-height: 60px;
+  color: #1f2937;
+  line-height: 1.5;
+  box-sizing: border-box;
+  display: block;
+}
+
+#awr-root .awr-panel-ta:focus {
+  outline: none;
+  border-color: #4A90D9;
+  box-shadow: 0 0 0 2px rgba(74,144,217,0.15);
+}
+
+#awr-root .awr-panel-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+#awr-root .awr-panel-save {
+  margin-left: auto;
+  padding: 5px 14px;
+  background: #4A90D9;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#awr-root .awr-panel-save:hover { background: #3a7bc8; }
+
+#awr-root .awr-panel-cancel {
+  padding: 5px 10px;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#awr-root .awr-panel-cancel:hover { background: #e5e7eb; }
+
+#awr-root .awr-panel-shot {
+  padding: 5px 10px;
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#awr-root .awr-panel-shot:hover { background: #e0f2fe; }
+#awr-root .awr-panel-shot:disabled { opacity: 0.5; cursor: not-allowed; }
+
+#awr-root .awr-panel-shot-preview {
+  margin-top: 6px;
+}
+
+/* Area selection rectangle */
+#awr-root .awr-area {
+  position: fixed;
+  pointer-events: none;
+  border: 2px dashed rgba(74, 144, 217, 0.8);
+  background: rgba(74, 144, 217, 0.08);
+  display: none;
+  z-index: 2147483646;
+}
