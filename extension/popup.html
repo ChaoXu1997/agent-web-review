@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Web Review</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <img src="icons/icon48.svg" alt="" class="popup-logo" width="24" height="24">
+      <h1 class="popup-title">Agent Web Review</h1>
+      <span class="status-dot" id="statusDot" title="Server status"></span>
+    </header>
+
+    <div class="popup-section">
+      <label class="field-label" for="serverUrl">Server URL</label>
+      <input class="field-input" id="serverUrl" type="text" spellcheck="false">
+    </div>
+
+    <div class="popup-section">
+      <button class="btn btn-primary" id="toggleBtn" data-action="toggle">
+        <span class="btn-icon">&#128269;</span>
+        <span class="btn-label">Start Inspecting</span>
+      </button>
+      <p class="hint">or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="popup-section">
+      <div class="section-header">
+        <h2 class="section-title">Comments</h2>
+        <button class="btn btn-sm" id="clearAllBtn" data-action="clearAll" style="display:none">Clear All</button>
+      </div>
+      <div class="comment-list" id="commentList">
+        <p class="empty-state" id="emptyState">No comments yet. Start inspecting and click on elements.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
