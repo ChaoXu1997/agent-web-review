@@ -67,7 +67,7 @@
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  transition: transform 0.12s ease;
+  transition: transform 0.12s ease, background 0.2s ease;
   z-index: 2147483647;
 }
 
@@ -78,6 +78,31 @@
 #awr-root .awr-marker--orphan {
   opacity: 0.3;
   pointer-events: none;
+}
+
+/* Resolved marker: grey background with green checkmark */
+#awr-root .awr-marker--resolved {
+  background: #9ca3af;
+  color: #fff;
+}
+
+#awr-root .awr-marker--resolved::after {
+  content: "✓";
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
 /* Marker tooltip */

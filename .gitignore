@@ -1,0 +1,4 @@
+.gitnexus
+__pycache__/
+*.pyc
+server/data/

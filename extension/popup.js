@@ -100,14 +100,17 @@
     clearAllBtn.style.display = "";
 
     comments.forEach((c, i) => {
+      const isResolved = c.status === "resolved";
       const item = document.createElement("div");
-      item.className = "comment-item";
+      item.className = "comment-item" + (isResolved ? " comment-item--resolved" : "");
+      const statusClass = isResolved ? "comment-status--resolved" : "comment-status--open";
+      const statusLabel = isResolved ? "Resolved" : "Open";
       item.innerHTML = `
         <span class="comment-marker">${i + 1}</span>
         <div class="comment-body">
           <div class="comment-text">${escapeHtml(c.comment_text)}</div>
           ${c.element_selector ? `<div class="comment-selector" title="${escapeHtml(c.element_selector)}">${escapeHtml(truncate(c.element_selector, 60))}</div>` : ""}
-          <div class="comment-time">${formatTime(c.timestamp)}</div>
+          <div class="comment-time">${formatTime(c.timestamp)} <span class="comment-status ${statusClass}">${statusLabel}</span></div>
         </div>
         <button class="comment-delete" data-id="${c.id}" title="Delete">&times;</button>
       `;

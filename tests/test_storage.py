@@ -127,5 +127,115 @@ class TestCommentStorage(unittest.TestCase):
         self.assertEqual(restored.element_selector, original.element_selector)
 
 
+    # ---- update status ----
+
+    def test_update_status_resolved(self):
+        c = Comment(page_url="http://a.com", comment_text="resolve me")
+        created = self.storage.create(c)
+        updated = self.storage.update_status(created.id, "resolved")
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated.status, "resolved")
+        self.assertEqual(updated.id, created.id)
+        self.assertEqual(updated.comment_text, "resolve me")
+
+    def test_update_status_nonexistent(self):
+        result = self.storage.update_status("nonexistent123", "resolved")
+        self.assertIsNone(result)
+
+    def test_update_status_persists(self):
+        c = Comment(page_url="http://a.com", comment_text="persist")
+        created = self.storage.create(c)
+        self.storage.update_status(created.id, "resolved")
+        found = self.storage.get_by_id(created.id)
+        self.assertEqual(found.status, "resolved")
+
+
+    # ---- get_all with status filter ----
+
+    def test_get_all_filter_by_status_open(self):
+        c1 = Comment(page_url="http://a.com", comment_text="open1")
+        c2 = Comment(page_url="http://a.com", comment_text="open2")
+        c3 = Comment(page_url="http://a.com", comment_text="resolved1")
+        self.storage.create(c1)
+        self.storage.create(c2)
+        created3 = self.storage.create(c3)
+        self.storage.update_status(created3.id, "resolved")
+        open_comments = self.storage.get_all(status="open")
+        self.assertEqual(len(open_comments), 2)
+        for c in open_comments:
+            self.assertEqual(c.status, "open")
+
+    def test_get_all_filter_by_status_resolved(self):
+        c1 = Comment(page_url="http://a.com", comment_text="open1")
+        c2 = Comment(page_url="http://a.com", comment_text="resolved1")
+        self.storage.create(c1)
+        created2 = self.storage.create(c2)
+        self.storage.update_status(created2.id, "resolved")
+        resolved = self.storage.get_all(status="resolved")
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0].status, "resolved")
+
+    def test_get_all_filter_by_status_no_match(self):
+        c = Comment(page_url="http://a.com", comment_text="open1")
+        self.storage.create(c)
+        resolved = self.storage.get_all(status="resolved")
+        self.assertEqual(len(resolved), 0)
+
+    def test_get_all_filter_combined_page_url_and_status(self):
+        self.storage.create(Comment(page_url="http://a.com", comment_text="a-open"))
+        c2 = Comment(page_url="http://a.com", comment_text="a-resolved")
+        self.storage.create(c2)
+        self.storage.update_status(c2.id, "resolved")
+        self.storage.create(Comment(page_url="http://b.com", comment_text="b-open"))
+        result = self.storage.get_all(page_url="http://a.com", status="resolved")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].comment_text, "a-resolved")
+
+    def test_get_all_no_status_returns_all(self):
+        c1 = Comment(page_url="http://a.com", comment_text="open1")
+        c2 = Comment(page_url="http://a.com", comment_text="resolved1")
+        self.storage.create(c1)
+        created2 = self.storage.create(c2)
+        self.storage.update_status(created2.id, "resolved")
+        all_c = self.storage.get_all()
+        self.assertEqual(len(all_c), 2)
+
+    # ---- delete_all with status filter ----
+
+    def test_delete_all_by_status(self):
+        c1 = Comment(page_url="http://a.com", comment_text="open1")
+        c2 = Comment(page_url="http://a.com", comment_text="resolved1")
+        self.storage.create(c1)
+        created2 = self.storage.create(c2)
+        self.storage.update_status(created2.id, "resolved")
+        removed = self.storage.delete_all(status="resolved")
+        self.assertEqual(removed, 1)
+        remaining = self.storage.get_all()
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].status, "open")
+
+    def test_delete_all_by_status_no_match(self):
+        c = Comment(page_url="http://a.com", comment_text="open1")
+        self.storage.create(c)
+        removed = self.storage.delete_all(status="resolved")
+        self.assertEqual(removed, 0)
+        self.assertEqual(len(self.storage.get_all()), 1)
+
+    def test_delete_all_combined_page_url_and_status(self):
+        self.storage.create(Comment(page_url="http://a.com", comment_text="a-open"))
+        c2 = Comment(page_url="http://a.com", comment_text="a-resolved")
+        self.storage.create(c2)
+        self.storage.update_status(c2.id, "resolved")
+        self.storage.create(Comment(page_url="http://b.com", comment_text="b-resolved"))
+        # also create resolved on b.com
+        c4 = Comment(page_url="http://b.com", comment_text="b-resolved2")
+        self.storage.create(c4)
+        self.storage.update_status(c4.id, "resolved")
+        removed = self.storage.delete_all(page_url="http://a.com", status="resolved")
+        self.assertEqual(removed, 1)
+        self.assertEqual(len(self.storage.get_all(page_url="http://a.com")), 1)
+        self.assertEqual(len(self.storage.get_all(page_url="http://b.com")), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

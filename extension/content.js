@@ -10,6 +10,7 @@
     hlLabel: P + "-hl-label",
     marker: P + "-marker",
     markerOrphan: P + "-marker--orphan",
+    markerResolved: P + "-marker--resolved",
     panel: P + "-panel",
     panelEl: P + "-panel-el",
     panelSel: P + "-panel-sel",
@@ -160,6 +161,9 @@
     mk.dataset.commentId = comment.id;
     mk.dataset.selector = comment.element_selector || "";
     mk.title = comment.comment_text;
+    if (comment.status === "resolved") {
+      mk.classList.add(EL.markerResolved);
+    }
     mk.addEventListener("click", (e) => {
       e.stopPropagation();
       showMarkerTooltip(mk, comment);
@@ -220,6 +224,17 @@
     if (!root) return;
     const existing = root.querySelector("." + EL.markerTip);
     if (existing) existing.remove();
+  }
+
+  function resolveMarker(commentId) {
+    if (!root) return;
+    const mk = root.querySelector('.' + EL.marker + '[data-comment-id="' + commentId + '"]');
+    if (mk) {
+      mk.classList.add(EL.markerResolved);
+    }
+    /* Update local comment state */
+    const c = comments.find((c) => c.id === commentId);
+    if (c) c.status = "resolved";
   }
 
   /* ================================================================
@@ -491,6 +506,9 @@
           comments = [];
           if (root) root.querySelectorAll("." + EL.marker).forEach((m) => m.remove());
           markerCount = 0;
+          chrome.runtime.sendMessage({ action: "commentsChanged" });
+        } else if (msg.type === "comment_resolved") {
+          resolveMarker(msg.data.id);
           chrome.runtime.sendMessage({ action: "commentsChanged" });
         }
       } catch { /* ignore parse errors */ }
