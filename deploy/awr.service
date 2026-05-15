@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 User=xuchao
-WorkingDirectory=/home/xuchao/agent-web-review/server
-Environment=AWR_ADMIN_TOKEN=SET_ME
+WorkingDirectory=/mnt/disk_array/home/xuchao/agent-web-review/server
+Environment=AWR_ADMIN_TOKEN=861e723a97792396fa162b9e5e2f0270558714938db73db80619b7d81927de3f
 Environment=AWR_PORT=9876
-ExecStart=/home/xuchao/agent-web-review/server/venv/bin/uvicorn app.main:main --host 0.0.0.0 --port 9876
+ExecStart=/mnt/disk_array/home/xuchao/agent-web-review/server/venv/bin/uvicorn app.main:create_app --factory --host 0.0.0.0 --port 9876
 Restart=on-failure
 RestartSec=5
 

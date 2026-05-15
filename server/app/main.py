@@ -15,6 +15,7 @@ from app.mcp.server import create_mcp_server
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    global _app
     settings = settings or Settings()
 
     os.makedirs(os.path.dirname(settings.database_url), exist_ok=True)
@@ -60,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     mcp_server = create_mcp_server(settings.database_url)
     app.mount("/mcp", mcp_server.streamable_http_app())
 
+    _app = app
     return app
 
 
