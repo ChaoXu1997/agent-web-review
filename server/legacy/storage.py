@@ -53,7 +53,7 @@ class CommentStorage:
             raw = [c for c in raw if c.get("page_url") == page_url]
         if status is not None:
             raw = [c for c in raw if c.get("status") == status]
-        raw.sort(key=lambda c: c.get("timestamp", ""), reverse=True)
+        raw.sort(key=lambda c: c.get("timestamp", ""))
         return [Comment.from_dict(c) for c in raw]
 
     def get_by_id(self, comment_id: str) -> Optional[Comment]:

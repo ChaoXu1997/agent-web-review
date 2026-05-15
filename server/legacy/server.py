@@ -268,7 +268,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             filter_desc = f"page_url={page_url}" if page_url else f"status={status}"
             if page_url and status:
                 filter_desc = f"page_url={page_url}&status={status}"
-            sse_manager.broadcast("comments_cleared", {"filter": filter_desc})
+            data: dict = {"filter": filter_desc}
+        if page_url:
+            data["page_url"] = page_url
+        sse_manager.broadcast("comments_cleared", data)
         self._send(200, {"deleted": removed})
 
     def _handle_patch(self, comment_id: str) -> None:
