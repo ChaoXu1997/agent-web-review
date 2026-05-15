@@ -14,6 +14,7 @@
   let currentTab = null;
   let serverUrl = "";
   let isInspecting = false;
+  let apiKey = "";
 
   /* ---- helpers ---- */
 
@@ -23,12 +24,19 @@
     });
   }
 
+  async function getStoredApiKey() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getApiKey" }, (key) => resolve(key || ""));
+    });
+  }
+
   async function apiFetch(path, opts = {}) {
     const url = serverUrl.replace(/\/+$/, "") + path;
-    const res = await fetch(url, {
-      ...opts,
-      headers: { "Content-Type": "application/json", ...opts.headers },
-    });
+    const headers = { "Content-Type": "application/json", ...opts.headers };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    const res = await fetch(url, { ...opts, headers });
     if (res.status === 204) return null;
     return res.json();
   }
@@ -59,6 +67,9 @@
 
     serverUrl = await getServerUrl();
     serverUrlInput.value = serverUrl;
+
+    apiKey = await getStoredApiKey();
+    document.getElementById("apiKey").value = apiKey;
 
     checkHealth();
     loadComments();
@@ -133,9 +144,24 @@
     loadComments();
   });
 
-  toggleBtn.addEventListener("click", () => {
+  document.getElementById("apiKey").addEventListener("change", async () => {
+    apiKey = document.getElementById("apiKey").value.trim();
+    chrome.runtime.sendMessage({ action: "setApiKey", key: apiKey });
+    checkHealth();
+    loadComments();
+  });
+
+  toggleBtn.addEventListener("click", async () => {
     if (!currentTab || !currentTab.id) return;
-    chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    try {
+      await chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    } catch {
+      await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id },
+        files: ["content.js"],
+      });
+      await chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    }
     isInspecting = !isInspecting;
     toggleBtn.classList.toggle("active", isInspecting);
     toggleBtn.querySelector(".btn-label").textContent = isInspecting ? "Stop Inspecting" : "Start Inspecting";
