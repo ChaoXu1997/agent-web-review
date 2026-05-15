@@ -1,0 +1,15 @@
+[Unit]
+Description=Agent Web Review Server
+After=network.target
+
+[Service]
+User=xuchao
+WorkingDirectory=/home/xuchao/agent-web-review/server
+Environment=AWR_ADMIN_TOKEN=SET_ME
+Environment=AWR_PORT=9876
+ExecStart=/home/xuchao/agent-web-review/server/venv/bin/uvicorn app.main:main --host 0.0.0.0 --port 9876
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
