@@ -112,16 +112,20 @@
 
     comments.forEach((c, i) => {
       const isResolved = c.status === "resolved";
+      const hasShot = Boolean(c.screenshot_b64);
       const item = document.createElement("div");
       item.className = "comment-item" + (isResolved ? " comment-item--resolved" : "");
       const statusClass = isResolved ? "comment-status--resolved" : "comment-status--open";
       const statusLabel = isResolved ? "Resolved" : "Open";
+      const shotClass = hasShot ? "comment-shot--yes" : "comment-shot--no";
+      const shotLabel = hasShot ? "📷 Screenshot" : "📷 No screenshot";
+      const shotTitle = hasShot ? "This comment includes a screenshot" : "No screenshot attached";
       item.innerHTML = `
         <span class="comment-marker">${i + 1}</span>
         <div class="comment-body">
           <div class="comment-text">${escapeHtml(c.comment_text)}</div>
           ${c.element_selector ? `<div class="comment-selector" title="${escapeHtml(c.element_selector)}">${escapeHtml(truncate(c.element_selector, 60))}</div>` : ""}
-          <div class="comment-time">${formatTime(c.timestamp)} <span class="comment-status ${statusClass}">${statusLabel}</span></div>
+          <div class="comment-time">${formatTime(c.timestamp)} <span class="comment-status ${statusClass}">${statusLabel}</span><span class="comment-shot ${shotClass}" title="${escapeHtml(shotTitle)}">${shotLabel}</span></div>
         </div>
         <button class="comment-delete" data-id="${c.id}" title="Delete">&times;</button>
       `;

@@ -219,6 +219,16 @@
 #awr-root .awr-panel-shot:hover { background: #e0f2fe; }
 #awr-root .awr-panel-shot:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Active (screenshot captured) state — green accent so the user can see
+   at a glance that the comment will carry a screenshot. */
+#awr-root .awr-panel-shot--active {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+  font-weight: 600;
+}
+#awr-root .awr-panel-shot--active:hover { background: #bbf7d0; }
+
 #awr-root .awr-panel-shot-preview {
   margin-top: 6px;
 }

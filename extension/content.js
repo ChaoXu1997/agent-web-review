@@ -276,7 +276,10 @@
 
     const shotBtn = document.createElement("button");
     shotBtn.className = EL.panelShot;
-    shotBtn.title = "Capture screenshot of element";
+    shotBtn.type = "button";
+    shotBtn.dataset.testid = "screenshot-btn";
+    shotBtn.setAttribute("aria-label", "Capture screenshot of element");
+    shotBtn.title = "Capture screenshot (optional)";
     shotBtn.textContent = "📷 Screenshot";
 
     const cancelBtn = document.createElement("button");
@@ -316,6 +319,7 @@
       shotBtn.disabled = true;
       shotBtn.textContent = "Capturing…";
       const b64 = await captureScreenshot(elementInfo.element);
+      shotBtn.disabled = false;
       if (b64) {
         pendingScreenshot = b64;
         preview.textContent = "";
@@ -323,9 +327,11 @@
         img.src = b64;
         img.style.cssText = "max-width:100%;max-height:120px;border-radius:4px;margin-top:6px;border:1px solid #e5e7eb;";
         preview.appendChild(img);
+        markShot(shotBtn);
+      } else {
+        /* capture failed — make sure state reflects no screenshot */
+        markUnshot(shotBtn);
       }
-      shotBtn.disabled = false;
-      shotBtn.textContent = "📷 Screenshot";
     });
 
     ta.addEventListener("keydown", (e) => {
@@ -343,6 +349,22 @@
       panel = null;
     }
     pendingScreenshot = null;
+  }
+
+  /* Reflect screenshot state on the shot button so the user can tell at a
+     glance whether the comment will carry a screenshot. */
+  function markShot(shotBtn) {
+    shotBtn.classList.add(EL.panelShot + "--active");
+    shotBtn.textContent = "📷 Screenshot ✓";
+    shotBtn.setAttribute("aria-label", "Screenshot captured. Click again to retake.");
+    shotBtn.title = "Screenshot captured — will be attached. Click to retake.";
+  }
+
+  function markUnshot(shotBtn) {
+    shotBtn.classList.remove(EL.panelShot + "--active");
+    shotBtn.textContent = "📷 Screenshot";
+    shotBtn.setAttribute("aria-label", "Capture screenshot of element");
+    shotBtn.title = "Capture screenshot (optional)";
   }
 
   async function saveComment(elementInfo, text) {
