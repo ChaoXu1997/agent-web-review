@@ -1,0 +1,17 @@
+{
+  "description": "AWR (agent-web-review) hooks. Stop hook reminds the user when open web-review comments are pending.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check-open-comments.sh",
+            "args": [],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
