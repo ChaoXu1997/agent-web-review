@@ -4,7 +4,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Size limits for unauthenticated POST payloads (protect server memory).
+MAX_SCREENSHOT_B64 = 5_000_000  # ~3.7MB binary base64-encoded
+MAX_ELEMENT_FIELD = 50_000
 
 
 class CommentCreate(BaseModel):
@@ -12,16 +16,15 @@ class CommentCreate(BaseModel):
     comment_text: str
     element_selector: str = ""
     element_xpath: str = ""
-    element_text: str = ""
-    element_html: str = ""
-    screenshot_b64: str = ""
+    element_text: str = Field(default="", max_length=MAX_ELEMENT_FIELD)
+    element_html: str = Field(default="", max_length=MAX_ELEMENT_FIELD)
+    screenshot_b64: str = Field(default="", max_length=MAX_SCREENSHOT_B64)
     area: Optional[dict] = None
     status: str = "open"
 
 
 class CommentResponse(BaseModel):
     id: str
-    user_id: str
     page_url: str
     comment_text: str
     element_selector: str = ""
@@ -34,25 +37,12 @@ class CommentResponse(BaseModel):
     status: str = "open"
 
 
-class UserResponse(BaseModel):
-    id: str
-    name: str
-    api_key: str
-    created_at: str
-
-
-class CreateUserRequest(BaseModel):
-    name: str
-
-
 class ProjectMappingCreate(BaseModel):
     page_url: str
     project_path: str
 
 
 class ProjectMappingResponse(BaseModel):
-    id: str
-    user_id: str
     page_url: str
     project_path: str
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -13,25 +12,31 @@ router = APIRouter(tags=["sse"])
 
 class SSEManager:
     def __init__(self) -> None:
-        self._clients: dict[str, asyncio.Queue] = {}
+        # client_id -> (queue, owning event loop). Each asyncio.Queue is bound to
+        # the loop it was created on; broadcasting must schedule the put on the
+        # owner loop via call_soon_threadsafe to stay safe across loops/threads.
+        self._clients: dict[str, tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = {}
         self._lock = threading.Lock()
 
     def add_client(self, client_id: str, queue: asyncio.Queue) -> None:
+        loop = asyncio.get_running_loop()
         with self._lock:
-            self._clients[client_id] = queue
+            self._clients[client_id] = (queue, loop)
 
     def remove_client(self, client_id: str) -> None:
         with self._lock:
             self._clients.pop(client_id, None)
 
-    def broadcast(self, event_type: str, data: dict, user_id: Optional[str] = None) -> None:
+    def broadcast(self, event_type: str, data: dict) -> None:
         msg = json.dumps({"type": event_type, "data": data}, ensure_ascii=False)
         with self._lock:
-            for cid, queue in self._clients.items():
-                try:
-                    queue.put_nowait(msg)
-                except asyncio.QueueFull:
-                    pass
+            clients = list(self._clients.values())
+        for queue, loop in clients:
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, msg)
+            except RuntimeError:
+                # loop closed; client will be reaped by its handler's finally
+                pass
 
     @property
     def client_count(self) -> int:

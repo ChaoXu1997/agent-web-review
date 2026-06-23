@@ -1,96 +1,88 @@
 from __future__ import annotations
 
-import json
-import sqlite3
+import threading
 from typing import Optional
 
 from app.models import CommentCreate, new_id, now_iso
 
 
 class CommentStorage:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
+    """In-memory comment store, grouped by page_url.
 
-    def create(self, user_id: str, data: CommentCreate) -> dict:
+    State lives only for the server process lifetime (restart loses data, as intended).
+    Thread-safe via a single coarse-grained lock.
+    """
+
+    def __init__(self) -> None:
+        self._comments: list[dict] = []
+        self._lock = threading.Lock()
+
+    def create(self, data: CommentCreate) -> dict:
         cid = new_id()
         ts = now_iso()
-        area_json = json.dumps(data.area) if data.area else None
-        self._conn.execute(
-            """INSERT INTO comments
-               (id, user_id, page_url, comment_text, element_selector,
-                element_xpath, element_text, element_html, screenshot_b64,
-                area, timestamp, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (cid, user_id, data.page_url, data.comment_text,
-             data.element_selector, data.element_xpath, data.element_text,
-             data.element_html, data.screenshot_b64, area_json, ts, data.status),
-        )
-        self._conn.commit()
-        return self._get_by_id(cid)
+        comment = {
+            "id": cid,
+            "page_url": data.page_url,
+            "comment_text": data.comment_text,
+            "element_selector": data.element_selector,
+            "element_xpath": data.element_xpath,
+            "element_text": data.element_text,
+            "element_html": data.element_html,
+            "screenshot_b64": data.screenshot_b64,
+            "area": data.area,
+            "timestamp": ts,
+            "status": data.status,
+        }
+        with self._lock:
+            self._comments.append(comment)
+        return comment
 
     def get_all(
         self,
-        user_id: str,
         page_url: Optional[str] = None,
         status: Optional[str] = None,
     ) -> list[dict]:
-        query = "SELECT * FROM comments WHERE user_id = ?"
-        params: list = [user_id]
+        with self._lock:
+            snapshot = list(self._comments)
+        result = snapshot
         if page_url is not None:
-            query += " AND page_url = ?"
-            params.append(page_url)
+            result = [c for c in result if c["page_url"] == page_url]
         if status is not None:
-            query += " AND status = ?"
-            params.append(status)
-        query += " ORDER BY timestamp"
-        rows = self._conn.execute(query, params).fetchall()
-        return [_row_to_dict(r) for r in rows]
+            result = [c for c in result if c["status"] == status]
+        result = sorted(result, key=lambda c: c["timestamp"])
+        return result
 
-    def update_status(self, user_id: str, comment_id: str, new_status: str) -> Optional[dict]:
-        self._conn.execute(
-            "UPDATE comments SET status = ? WHERE id = ? AND user_id = ?",
-            (new_status, comment_id, user_id),
-        )
-        self._conn.commit()
-        row = self._conn.execute(
-            "SELECT * FROM comments WHERE id = ? AND user_id = ?",
-            (comment_id, user_id),
-        ).fetchone()
-        return _row_to_dict(row) if row else None
+    def update_status(self, comment_id: str, new_status: str) -> Optional[dict]:
+        with self._lock:
+            for c in self._comments:
+                if c["id"] == comment_id:
+                    c["status"] = new_status
+                    return dict(c)
+        return None
 
-    def delete(self, user_id: str, comment_id: str) -> bool:
-        cur = self._conn.execute(
-            "DELETE FROM comments WHERE id = ? AND user_id = ?",
-            (comment_id, user_id),
-        )
-        self._conn.commit()
-        return cur.rowcount > 0
+    def delete(self, comment_id: str) -> bool:
+        with self._lock:
+            for i, c in enumerate(self._comments):
+                if c["id"] == comment_id:
+                    self._comments.pop(i)
+                    return True
+        return False
 
     def delete_all(
         self,
-        user_id: str,
         page_url: Optional[str] = None,
         status: Optional[str] = None,
     ) -> int:
-        query = "DELETE FROM comments WHERE user_id = ?"
-        params: list = [user_id]
-        if page_url is not None:
-            query += " AND page_url = ?"
-            params.append(page_url)
-        if status is not None:
-            query += " AND status = ?"
-            params.append(status)
-        cur = self._conn.execute(query, params)
-        self._conn.commit()
-        return cur.rowcount
-
-    def _get_by_id(self, comment_id: str) -> Optional[dict]:
-        row = self._conn.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone()
-        return _row_to_dict(row) if row else None
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
-    if d.get("area") and isinstance(d["area"], str):
-        d["area"] = json.loads(d["area"])
-    return d
+        with self._lock:
+            original = len(self._comments)
+            kept = []
+            for c in self._comments:
+                if page_url is not None and c["page_url"] != page_url:
+                    kept.append(c)
+                    continue
+                if status is not None and c["status"] != status:
+                    kept.append(c)
+                    continue
+                # matches filter -> delete
+            self._comments = kept
+            return original - len(kept)
