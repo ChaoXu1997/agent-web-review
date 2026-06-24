@@ -46,12 +46,14 @@ class CommentStorage:
             json.dump({"comments": comments}, f, indent=2, ensure_ascii=False)
         os.replace(tmp, self._path)
 
-    def get_all(self, page_url: Optional[str] = None) -> list[Comment]:
+    def get_all(self, page_url: Optional[str] = None, status: Optional[str] = None) -> list[Comment]:
         with self._lock:
             raw = self._read_all()
         if page_url is not None:
             raw = [c for c in raw if c.get("page_url") == page_url]
-        raw.sort(key=lambda c: c.get("timestamp", ""), reverse=True)
+        if status is not None:
+            raw = [c for c in raw if c.get("status") == status]
+        raw.sort(key=lambda c: c.get("timestamp", ""))
         return [Comment.from_dict(c) for c in raw]
 
     def get_by_id(self, comment_id: str) -> Optional[Comment]:
@@ -78,11 +80,28 @@ class CommentStorage:
             self._write_all(new)
         return True
 
-    def delete_all(self, page_url: str) -> int:
+    def delete_all(self, page_url: Optional[str] = None, status: Optional[str] = None) -> int:
+        if page_url is None and status is None:
+            raise ValueError("at least one of page_url or status is required")
         with self._lock:
             raw = self._read_all()
-            new = [c for c in raw if c.get("page_url") != page_url]
+            new = [c for c in raw
+                   if not ((page_url is None or c.get("page_url") == page_url) and
+                           (status is None or c.get("status") == status))]
             removed = len(raw) - len(new)
             if removed:
                 self._write_all(new)
         return removed
+
+    def update_status(self, comment_id: str, new_status: str) -> Optional[Comment]:
+        with self._lock:
+            raw = self._read_all()
+            updated = None
+            for i, c in enumerate(raw):
+                if c.get("id") == comment_id:
+                    raw[i]["status"] = new_status
+                    updated = Comment.from_dict(raw[i])
+                    break
+            if updated is not None:
+                self._write_all(raw)
+            return updated

@@ -1,0 +1,8 @@
+{
+  "name": "awr",
+  "version": "0.1.0",
+  "description": "Agent Web Review — 在浏览器评论网页元素，/awr 拉取评论、改代码、resolve。Pull 模型，需 AWR server 跑在 localhost:9876。",
+  "author": {
+    "name": "chao"
+  }
+}

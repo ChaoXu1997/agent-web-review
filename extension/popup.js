@@ -14,6 +14,7 @@
   let currentTab = null;
   let serverUrl = "";
   let isInspecting = false;
+  let apiKey = "";
 
   /* ---- helpers ---- */
 
@@ -23,12 +24,19 @@
     });
   }
 
+  async function getStoredApiKey() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getApiKey" }, (key) => resolve(key || ""));
+    });
+  }
+
   async function apiFetch(path, opts = {}) {
     const url = serverUrl.replace(/\/+$/, "") + path;
-    const res = await fetch(url, {
-      ...opts,
-      headers: { "Content-Type": "application/json", ...opts.headers },
-    });
+    const headers = { "Content-Type": "application/json", ...opts.headers };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    const res = await fetch(url, { ...opts, headers });
     if (res.status === 204) return null;
     return res.json();
   }
@@ -59,6 +67,9 @@
 
     serverUrl = await getServerUrl();
     serverUrlInput.value = serverUrl;
+
+    apiKey = await getStoredApiKey();
+    document.getElementById("apiKey").value = apiKey;
 
     checkHealth();
     loadComments();
@@ -100,14 +111,21 @@
     clearAllBtn.style.display = "";
 
     comments.forEach((c, i) => {
+      const isResolved = c.status === "resolved";
+      const hasShot = Boolean(c.screenshot_b64);
       const item = document.createElement("div");
-      item.className = "comment-item";
+      item.className = "comment-item" + (isResolved ? " comment-item--resolved" : "");
+      const statusClass = isResolved ? "comment-status--resolved" : "comment-status--open";
+      const statusLabel = isResolved ? "Resolved" : "Open";
+      const shotClass = hasShot ? "comment-shot--yes" : "comment-shot--no";
+      const shotLabel = hasShot ? "📷 Screenshot" : "📷 No screenshot";
+      const shotTitle = hasShot ? "This comment includes a screenshot" : "No screenshot attached";
       item.innerHTML = `
         <span class="comment-marker">${i + 1}</span>
         <div class="comment-body">
           <div class="comment-text">${escapeHtml(c.comment_text)}</div>
           ${c.element_selector ? `<div class="comment-selector" title="${escapeHtml(c.element_selector)}">${escapeHtml(truncate(c.element_selector, 60))}</div>` : ""}
-          <div class="comment-time">${formatTime(c.timestamp)}</div>
+          <div class="comment-time">${formatTime(c.timestamp)} <span class="comment-status ${statusClass}">${statusLabel}</span><span class="comment-shot ${shotClass}" title="${escapeHtml(shotTitle)}">${shotLabel}</span></div>
         </div>
         <button class="comment-delete" data-id="${c.id}" title="Delete">&times;</button>
       `;
@@ -130,9 +148,24 @@
     loadComments();
   });
 
-  toggleBtn.addEventListener("click", () => {
+  document.getElementById("apiKey").addEventListener("change", async () => {
+    apiKey = document.getElementById("apiKey").value.trim();
+    chrome.runtime.sendMessage({ action: "setApiKey", key: apiKey });
+    checkHealth();
+    loadComments();
+  });
+
+  toggleBtn.addEventListener("click", async () => {
     if (!currentTab || !currentTab.id) return;
-    chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    try {
+      await chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    } catch {
+      await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id },
+        files: ["content.js"],
+      });
+      await chrome.tabs.sendMessage(currentTab.id, { action: "toggleInspect" });
+    }
     isInspecting = !isInspecting;
     toggleBtn.classList.toggle("active", isInspecting);
     toggleBtn.querySelector(".btn-label").textContent = isInspecting ? "Stop Inspecting" : "Start Inspecting";

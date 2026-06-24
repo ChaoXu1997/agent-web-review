@@ -20,6 +20,11 @@
     </div>
 
     <div class="popup-section">
+      <label class="field-label" for="apiKey">API Key</label>
+      <input class="field-input" id="apiKey" type="password" spellcheck="false" placeholder="Enter your API key">
+    </div>
+
+    <div class="popup-section">
       <button class="btn btn-primary" id="toggleBtn" data-action="toggle">
         <span class="btn-icon">&#128269;</span>
         <span class="btn-label">Start Inspecting</span>
@@ -32,7 +37,11 @@
     <div class="popup-section">
       <div class="section-header">
         <h2 class="section-title">Comments</h2>
-        <button class="btn btn-sm" id="clearAllBtn" data-action="clearAll" style="display:none">Clear All</button>
+        <span class="comment-count" id="commentCount"></span>
+      </div>
+      <div class="section-actions" id="sectionActions" style="display:none">
+        <button class="btn btn-sm btn-sm-green" id="clearResolvedBtn" style="display:none">Clear Resolved</button>
+        <button class="btn btn-sm" id="clearAllBtn">Clear All</button>
       </div>
       <div class="comment-list" id="commentList">
         <p class="empty-state" id="emptyState">No comments yet. Start inspecting and click on elements.</p>

@@ -10,6 +10,7 @@
     hlLabel: P + "-hl-label",
     marker: P + "-marker",
     markerOrphan: P + "-marker--orphan",
+    markerResolved: P + "-marker--resolved",
     panel: P + "-panel",
     panelEl: P + "-panel-el",
     panelSel: P + "-panel-sel",
@@ -27,11 +28,11 @@
   let active = false;
   let hovered = null;
   let comments = [];
-  let markerCount = 0;
   let areaSelecting = false;
   let areaStart = null;
   let areaRect = null;
   let serverUrl = "http://localhost:9876";
+  let apiKey = "";
   let html2canvasLoaded = false;
   let pendingScreenshot = null;
   let sseReconnectTimer = null;
@@ -153,13 +154,17 @@
    *  Marker manager
    * ================================================================ */
   function addMarker(comment) {
-    markerCount++;
+    const idx = comments.indexOf(comment);
+    const num = idx >= 0 ? idx + 1 : comments.length;
     const mk = document.createElement("div");
     mk.className = EL.marker;
-    mk.textContent = markerCount;
+    mk.textContent = num;
     mk.dataset.commentId = comment.id;
     mk.dataset.selector = comment.element_selector || "";
     mk.title = comment.comment_text;
+    if (comment.status === "resolved") {
+      mk.classList.add(EL.markerResolved);
+    }
     mk.addEventListener("click", (e) => {
       e.stopPropagation();
       showMarkerTooltip(mk, comment);
@@ -167,6 +172,14 @@
     root.appendChild(mk);
     positionMarker(mk);
     return mk;
+  }
+
+  function renumberMarkers() {
+    if (!root) return;
+    comments.forEach((c, i) => {
+      const mk = root.querySelector('.' + EL.marker + '[data-comment-id="' + c.id + '"]');
+      if (mk) mk.textContent = i + 1;
+    });
   }
 
   function positionMarker(mk) {
@@ -222,6 +235,17 @@
     if (existing) existing.remove();
   }
 
+  function resolveMarker(commentId) {
+    if (!root) return;
+    const mk = root.querySelector('.' + EL.marker + '[data-comment-id="' + commentId + '"]');
+    if (mk) {
+      mk.classList.add(EL.markerResolved);
+    }
+    /* Update local comment state */
+    const c = comments.find((c) => c.id === commentId);
+    if (c) c.status = "resolved";
+  }
+
   /* ================================================================
    *  Comment panel — built with DOM API, no innerHTML
    * ================================================================ */
@@ -252,7 +276,10 @@
 
     const shotBtn = document.createElement("button");
     shotBtn.className = EL.panelShot;
-    shotBtn.title = "Capture screenshot of element";
+    shotBtn.type = "button";
+    shotBtn.dataset.testid = "screenshot-btn";
+    shotBtn.setAttribute("aria-label", "Capture screenshot of element");
+    shotBtn.title = "Capture screenshot (optional)";
     shotBtn.textContent = "📷 Screenshot";
 
     const cancelBtn = document.createElement("button");
@@ -282,6 +309,7 @@
     });
 
     root.appendChild(panel);
+    panel.addEventListener("click", (e) => e.stopPropagation());
     ta.focus();
 
     saveBtn.addEventListener("click", () => saveComment(elementInfo, ta.value));
@@ -291,6 +319,7 @@
       shotBtn.disabled = true;
       shotBtn.textContent = "Capturing…";
       const b64 = await captureScreenshot(elementInfo.element);
+      shotBtn.disabled = false;
       if (b64) {
         pendingScreenshot = b64;
         preview.textContent = "";
@@ -298,9 +327,11 @@
         img.src = b64;
         img.style.cssText = "max-width:100%;max-height:120px;border-radius:4px;margin-top:6px;border:1px solid #e5e7eb;";
         preview.appendChild(img);
+        markShot(shotBtn);
+      } else {
+        /* capture failed — make sure state reflects no screenshot */
+        markUnshot(shotBtn);
       }
-      shotBtn.disabled = false;
-      shotBtn.textContent = "📷 Screenshot";
     });
 
     ta.addEventListener("keydown", (e) => {
@@ -318,6 +349,22 @@
       panel = null;
     }
     pendingScreenshot = null;
+  }
+
+  /* Reflect screenshot state on the shot button so the user can tell at a
+     glance whether the comment will carry a screenshot. */
+  function markShot(shotBtn) {
+    shotBtn.classList.add(EL.panelShot + "--active");
+    shotBtn.textContent = "📷 Screenshot ✓";
+    shotBtn.setAttribute("aria-label", "Screenshot captured. Click again to retake.");
+    shotBtn.title = "Screenshot captured — will be attached. Click to retake.";
+  }
+
+  function markUnshot(shotBtn) {
+    shotBtn.classList.remove(EL.panelShot + "--active");
+    shotBtn.textContent = "📷 Screenshot";
+    shotBtn.setAttribute("aria-label", "Capture screenshot of element");
+    shotBtn.title = "Capture screenshot (optional)";
   }
 
   async function saveComment(elementInfo, text) {
@@ -351,18 +398,25 @@
       data.screenshot_b64 = pendingScreenshot;
     }
 
+    const headers = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
     try {
       const res = await fetch(serverUrl.replace(/\/+$/, "") + "/api/comments", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: headers,
         body: JSON.stringify(data),
       });
       const comment = await res.json();
-      comments.push(comment);
-      addMarker(comment);
-      closePanel();
-      chrome.runtime.sendMessage({ action: "commentsChanged" });
+      if (!comments.some((c) => c.id === comment.id)) {
+        comments.push(comment);
+        addMarker(comment);
+        renumberMarkers();
+      }
+      chrome.runtime.sendMessage({ action: "commentsChanged" }).catch(() => {});
     } catch { /* server offline */ }
+    closePanel();
   }
 
   /* ================================================================
@@ -460,9 +514,15 @@
    * ================================================================ */
   async function loadComments() {
     try {
+      const headers = {};
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
       const url = serverUrl.replace(/\/+$/, "") + "/api/comments?page_url=" + encodeURIComponent(location.href);
-      const res = await fetch(url);
+      const res = await fetch(url, { headers });
       comments = await res.json();
+      /* Clear old markers before re-adding */
+      if (root) root.querySelectorAll("." + EL.marker).forEach((m) => m.remove());
       comments.forEach((c) => addMarker(c));
     } catch { /* server offline */ }
   }
@@ -477,21 +537,28 @@
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === "comment_added" && msg.data.page_url === location.href) {
+          /* Skip if already added locally (saveComment did it) */
+          if (comments.some((c) => c.id === msg.data.id)) return;
           comments.push(msg.data);
           addMarker(msg.data);
-          chrome.runtime.sendMessage({ action: "commentsChanged" });
+          renumberMarkers();
+          chrome.runtime.sendMessage({ action: "commentsChanged" }).catch(() => {});
         } else if (msg.type === "comment_deleted") {
           comments = comments.filter((c) => c.id !== msg.data.id);
           if (root) {
             const mk = root.querySelector('.' + EL.marker + '[data-comment-id="' + msg.data.id + '"]');
             if (mk) mk.remove();
           }
-          chrome.runtime.sendMessage({ action: "commentsChanged" });
+          renumberMarkers();
+          chrome.runtime.sendMessage({ action: "commentsChanged" }).catch(() => {});
         } else if (msg.type === "comments_cleared" && msg.data.page_url === location.href) {
           comments = [];
           if (root) root.querySelectorAll("." + EL.marker).forEach((m) => m.remove());
-          markerCount = 0;
-          chrome.runtime.sendMessage({ action: "commentsChanged" });
+          renumberMarkers();
+          chrome.runtime.sendMessage({ action: "commentsChanged" }).catch(() => {});
+        } else if (msg.type === "comment_resolved") {
+          resolveMarker(msg.data.id);
+          chrome.runtime.sendMessage({ action: "commentsChanged" }).catch(() => {});
         }
       } catch { /* ignore parse errors */ }
     };
@@ -543,6 +610,7 @@
   function onClick(e) {
     if (!active) return;
     if (root && root.contains(e.target)) return;
+    if (panel) return;
     if (areaSelecting) return;
 
     e.preventDefault();
@@ -586,7 +654,6 @@
     if (scrollRaf) return;
     scrollRaf = true;
     requestAnimationFrame(() => {
-      hideHighlight();
       repositionAllMarkers();
       scrollRaf = false;
     });
@@ -622,6 +689,7 @@
     document.addEventListener("mouseup", onMouseUp, true);
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll, true);
     document.body.style.cursor = "crosshair";
     loadComments();
@@ -639,6 +707,7 @@
     document.removeEventListener("mouseup", onMouseUp, true);
     document.removeEventListener("keydown", onKeyDown, true);
     document.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("scroll", onScroll, true);
     window.removeEventListener("resize", onScroll, true);
     document.body.style.cursor = "";
     hideHighlight();
@@ -656,13 +725,56 @@
     else activate();
   }
 
+  /* ---- orphan detection and double-injection guard ---- */
+  function forceCleanup() {
+    document.removeEventListener("mousemove", onMouseMove, true);
+    document.removeEventListener("mousedown", onMouseDown, true);
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("mousemove", onMouseMoveArea, true);
+    document.removeEventListener("mouseup", onMouseUp, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", onScroll, true);
+    document.body.style.cursor = "";
+    hideHighlight();
+    closePanel();
+    disconnectSSE();
+    stopDomObserver();
+    if (root) {
+      root.remove();
+      root = null;
+    }
+    active = false;
+  }
+
+  // Clean up any previous instance (e.g., after extension reload)
+  if (window.__awr_initialized && typeof window.__awr_cleanup === "function") {
+    try { window.__awr_cleanup(); } catch {}
+  }
+  window.__awr_initialized = true;
+  window.__awr_cleanup = forceCleanup;
+
+  // Detect context invalidation and self-clean
+  const orphanCheck = setInterval(() => {
+    try { chrome.runtime.id; } catch {
+      clearInterval(orphanCheck);
+      forceCleanup();
+      window.__awr_initialized = false;
+    }
+  }, 2000);
+
   /* ---- message from background/popup ---- */
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === "toggleInspect") toggle();
   });
 
-  /* get server URL from background */
-  chrome.runtime.sendMessage({ action: "getServerUrl" }, (url) => {
+  /* get server URL and API key from background */
+  chrome.runtime.sendMessage({ action: "getServerUrl" }).then((url) => {
     if (url) serverUrl = url;
-  });
+  }).catch(() => { /* background not ready yet */ });
+
+  chrome.runtime.sendMessage({ action: "getApiKey" }).then((key) => {
+    if (key) apiKey = key;
+  }).catch(() => { /* background not ready yet */ });
 })();

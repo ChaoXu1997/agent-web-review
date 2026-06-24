@@ -7,6 +7,11 @@ async function getServerUrl() {
   return serverUrl || DEFAULT_SERVER_URL;
 }
 
+async function getApiKey() {
+  const { apiKey } = await chrome.storage.local.get("apiKey");
+  return apiKey || "";
+}
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "toggle-inspect-mode") return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -28,6 +33,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "setServerUrl") {
     chrome.storage.local.set({ serverUrl: message.url });
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.action === "getApiKey") {
+    getApiKey().then(sendResponse);
+    return true;
+  }
+  if (message.action === "setApiKey") {
+    chrome.storage.local.set({ apiKey: message.key });
     sendResponse({ ok: true });
     return false;
   }

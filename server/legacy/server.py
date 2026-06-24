@@ -17,6 +17,7 @@ from typing import Optional
 
 from models import Comment
 from storage import CommentStorage
+from project_storage import ProjectMappingStorage
 
 logger = logging.getLogger("awr")
 
@@ -76,7 +77,7 @@ class SSEManager:
 
 def _cors_headers(origin: Optional[str] = None) -> dict:
     headers = {
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
     }
     if origin and (origin.startswith("chrome-extension://") or
@@ -94,6 +95,7 @@ def _cors_headers(origin: Optional[str] = None) -> dict:
 
 sse_manager = SSEManager()
 storage: Optional[CommentStorage] = None
+project_storage: Optional[ProjectMappingStorage] = None
 
 
 class ReviewHandler(BaseHTTPRequestHandler):
@@ -151,6 +153,22 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self._handle_sse()
             return
 
+        if path == "/api/projects":
+            if method == "GET":
+                mappings = project_storage.get_all()
+                self._send(200, mappings)
+                return
+            if method == "POST":
+                self._handle_create_project()
+                return
+            if method == "DELETE":
+                page_url = (qs.get("page_url") or [None])[0]
+                if page_url:
+                    self._handle_delete_project(page_url)
+                else:
+                    self._send(400, {"error": "page_url query parameter required for DELETE"})
+                return
+
         if path == "/api/comments":
             if method == "GET":
                 self._handle_list(qs)
@@ -160,10 +178,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 return
             if method == "DELETE":
                 page_url = (qs.get("page_url") or [None])[0]
-                if page_url:
-                    self._handle_delete_all(page_url)
+                status = (qs.get("status") or [None])[0]
+                if page_url or status:
+                    self._handle_delete_all(page_url, status=status)
                 else:
-                    self._send(400, {"error": "page_url query parameter required for DELETE"})
+                    self._send(400, {"error": "page_url or status query parameter required for DELETE"})
                 return
 
         if path.startswith("/api/comments/") and method == "DELETE":
@@ -171,13 +190,44 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self._handle_delete(comment_id)
             return
 
+        if path.startswith("/api/comments/") and method == "PATCH":
+            comment_id = path[len("/api/comments/"):]
+            self._handle_patch(comment_id)
+            return
+
         self._send(404, {"error": "not found"})
 
     # ---- endpoint handlers ----
 
+    def _handle_create_project(self) -> None:
+        try:
+            body = self._read_body()
+        except (ValueError, json.JSONDecodeError):
+            self._send(400, {"error": "invalid JSON body"})
+            return
+        if not body.get("page_url"):
+            self._send(400, {"error": "page_url is required"})
+            return
+        if not body.get("project_path"):
+            self._send(400, {"error": "project_path is required"})
+            return
+        try:
+            mapping = project_storage.create(body)
+        except ValueError as e:
+            self._send(409, {"error": str(e)})
+            return
+        self._send(201, mapping)
+
+    def _handle_delete_project(self, page_url: str) -> None:
+        if project_storage.delete(page_url):
+            self._send(200, {"deleted": True})
+        else:
+            self._send(404, {"error": f"mapping for {page_url} not found"})
+
     def _handle_list(self, qs: dict) -> None:
         page_url = (qs.get("page_url") or [None])[0]
-        comments = storage.get_all(page_url)
+        status = (qs.get("status") or [None])[0]
+        comments = storage.get_all(page_url, status=status)
         self._send(200, [c.to_dict() for c in comments])
 
     def _handle_create(self) -> None:
@@ -212,11 +262,46 @@ class ReviewHandler(BaseHTTPRequestHandler):
         else:
             self._send(404, {"error": f"comment {comment_id} not found"})
 
-    def _handle_delete_all(self, page_url: str) -> None:
-        removed = storage.delete_all(page_url)
+    def _handle_delete_all(self, page_url: Optional[str], status: Optional[str] = None) -> None:
+        removed = storage.delete_all(page_url, status=status)
         if removed:
-            sse_manager.broadcast("comments_cleared", {"page_url": page_url})
+            filter_desc = f"page_url={page_url}" if page_url else f"status={status}"
+            if page_url and status:
+                filter_desc = f"page_url={page_url}&status={status}"
+            data: dict = {"filter": filter_desc}
+        if page_url:
+            data["page_url"] = page_url
+        sse_manager.broadcast("comments_cleared", data)
         self._send(200, {"deleted": removed})
+
+    def _handle_patch(self, comment_id: str) -> None:
+        # Validate id format
+        if not re.match(r'^[a-f0-9]+$', comment_id):
+            self._send(400, {"error": "invalid comment id"})
+            return
+
+        # Parse body
+        try:
+            body = self._read_body()
+        except (ValueError, json.JSONDecodeError):
+            self._send(400, {"error": "invalid JSON body"})
+            return
+
+        # Validate status value
+        new_status = body.get("status")
+        if new_status != "resolved":
+            self._send(400, {"error": "invalid status value, only \"resolved\" is accepted"})
+            return
+
+        # Update storage
+        updated = storage.update_status(comment_id, new_status)
+        if updated is None:
+            self._send(404, {"error": f"comment {comment_id} not found"})
+            return
+
+        # Broadcast SSE event
+        sse_manager.broadcast("comment_resolved", updated.to_dict())
+        self._send(200, updated.to_dict())
 
     # ---- SSE ----
 
@@ -268,6 +353,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         self._route("DELETE")
+
+    def do_PATCH(self) -> None:
+        self._route("PATCH")
 
     def do_OPTIONS(self) -> None:
         self._route("OPTIONS")

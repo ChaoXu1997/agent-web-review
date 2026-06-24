@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "awr@awr-local": true
+  },
+  "extraKnownMarketplaces": {
+    "awr-local": {
+      "source": {
+        "source": "directory",
+        "path": "/home/chao/projects/agent-web-review/awr-claude-plugin"
+      }
+    }
+  }
+}

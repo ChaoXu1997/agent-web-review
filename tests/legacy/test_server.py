@@ -211,6 +211,183 @@ class TestServer(unittest.TestCase):
 
     # ---- SSE ----
 
+    def test_patch_comment_resolved(self):
+        code, body, _ = self._req("/api/comments", "POST", {
+            "page_url": "http://patch.com", "comment_text": "patch me",
+        })
+        self.assertEqual(code, 201)
+        cid = body["id"]
+        self.assertEqual(body["status"], "open")
+
+        code, body, _ = self._req(f"/api/comments/{cid}", "PATCH", {
+            "status": "resolved",
+        })
+        self.assertEqual(code, 200)
+        self.assertEqual(body["status"], "resolved")
+        self.assertEqual(body["id"], cid)
+        self.assertEqual(body["comment_text"], "patch me")
+
+    def test_patch_invalid_id_format(self):
+        code, body, _ = self._req("/api/comments/../../etc/passwd", "PATCH", {
+            "status": "resolved",
+        })
+        self.assertEqual(code, 400)
+
+    def test_patch_nonexistent_id(self):
+        code, body, _ = self._req("/api/comments/deadbeef1234", "PATCH", {
+            "status": "resolved",
+        })
+        self.assertEqual(code, 404)
+
+    def test_patch_invalid_status(self):
+        code, body, _ = self._req("/api/comments", "POST", {
+            "page_url": "http://bad-status.com", "comment_text": "test",
+        })
+        cid = code if code != 201 else body["id"]
+
+        code, body, _ = self._req(f"/api/comments/{cid}", "PATCH", {
+            "status": "open",
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("invalid", body.get("error", "").lower())
+
+        code, body, _ = self._req(f"/api/comments/{cid}", "PATCH", {
+            "status": "closed",
+        })
+        self.assertEqual(code, 400)
+
+    def test_patch_missing_body(self):
+        code, body, _ = self._req("/api/comments", "POST", {
+            "page_url": "http://empty-body.com", "comment_text": "test",
+        })
+        cid = body["id"]
+        # Send PATCH with no body
+        url = self._url(f"/api/comments/{cid}")
+        req = urllib.request.Request(url, method="PATCH")
+        try:
+            with urllib.request.urlopen(req):
+                self.fail("expected 400")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
+
+    def test_patch_broadcasts_sse(self):
+        import http.client
+
+        # Open SSE connection
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=8)
+        conn.request("GET", "/api/comments/stream", headers={"Origin": EXTENSION_ORIGIN})
+        resp = conn.getresponse()
+
+        got_event = threading.Event()
+        buf = ""
+
+        def read_sse():
+            nonlocal buf
+            while True:
+                try:
+                    chunk = resp.read(1)
+                    if not chunk:
+                        break
+                    buf += chunk.decode(errors="replace")
+                    if "comment_resolved" in buf:
+                        got_event.set()
+                        break
+                except Exception:
+                    break
+
+        t = threading.Thread(target=read_sse, daemon=True)
+        t.start()
+        time.sleep(0.5)
+
+        # Create a comment then resolve it via PATCH
+        code, body, _ = self._req("/api/comments", "POST", {
+            "page_url": "http://sse-patch.com", "comment_text": "resolve via SSE",
+        })
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+
+        found = got_event.wait(timeout=4)
+        t.join(timeout=2)
+        conn.close()
+        self.assertTrue(found, f"SSE comment_resolved event not received. Data: {buf[:300]}")
+
+    # ---- GET ?status filter ----
+
+    def test_get_filter_status_open(self):
+        self._req("/api/comments", "POST", {"page_url": "http://sf.com", "comment_text": "s-open1"})
+        code, body, _ = self._req("/api/comments", "POST", {"page_url": "http://sf.com", "comment_text": "s-open2"})
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+        code, body, _ = self._req("/api/comments?status=open")
+        self.assertEqual(code, 200)
+        texts = [c["comment_text"] for c in body]
+        self.assertIn("s-open1", texts)
+        self.assertNotIn("s-open2", texts)
+
+    def test_get_filter_status_resolved(self):
+        self._req("/api/comments", "POST", {"page_url": "http://sf.com", "comment_text": "r-open"})
+        code, body, _ = self._req("/api/comments", "POST", {"page_url": "http://sf.com", "comment_text": "r-resolved"})
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+        code, body, _ = self._req("/api/comments?status=resolved")
+        self.assertEqual(code, 200)
+        texts = [c["comment_text"] for c in body]
+        self.assertIn("r-resolved", texts)
+        self.assertNotIn("r-open", texts)
+
+    def test_get_filter_status_no_match(self):
+        # Use a unique page_url to avoid cross-test data contamination
+        self._req("/api/comments", "POST", {"page_url": "http://sf-nomatch.com", "comment_text": "only-open"})
+        code, body, _ = self._req("/api/comments?page_url=" + urllib.parse.quote("http://sf-nomatch.com") + "&status=resolved")
+        self.assertEqual(code, 200)
+        self.assertEqual(body, [])
+
+    def test_get_filter_combined_page_url_and_status(self):
+        self._req("/api/comments", "POST", {"page_url": "http://combo.com", "comment_text": "combo-open"})
+        code, body, _ = self._req("/api/comments", "POST", {"page_url": "http://combo.com", "comment_text": "combo-resolved"})
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+        self._req("/api/comments", "POST", {"page_url": "http://other.com", "comment_text": "other-resolved"})
+        code, body, _ = self._req("/api/comments?page_url=" + urllib.parse.quote("http://combo.com") + "&status=open")
+        self.assertEqual(code, 200)
+        texts = [c["comment_text"] for c in body]
+        self.assertIn("combo-open", texts)
+        self.assertNotIn("combo-resolved", texts)
+
+    # ---- DELETE ?status filter ----
+
+    def test_delete_all_by_status(self):
+        self._req("/api/comments", "POST", {"page_url": "http://ds.com", "comment_text": "ds-open"})
+        code, body, _ = self._req("/api/comments", "POST", {"page_url": "http://ds.com", "comment_text": "ds-resolved"})
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+        code, body, _ = self._req("/api/comments?status=resolved", "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["deleted"], 1)
+        code, remaining, _ = self._req("/api/comments?page_url=" + urllib.parse.quote("http://ds.com"))
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["status"], "open")
+
+    def test_delete_all_by_status_no_match(self):
+        self._req("/api/comments", "POST", {"page_url": "http://ds.com", "comment_text": "ds-open"})
+        code, body, _ = self._req("/api/comments?status=resolved", "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["deleted"], 0)
+
+    def test_delete_all_combined_page_url_and_status(self):
+        self._req("/api/comments", "POST", {"page_url": "http://dc.com", "comment_text": "dc-open"})
+        code, body, _ = self._req("/api/comments", "POST", {"page_url": "http://dc.com", "comment_text": "dc-resolved"})
+        cid = body["id"]
+        self._req(f"/api/comments/{cid}", "PATCH", {"status": "resolved"})
+        code, body, _ = self._req("/api/comments?page_url=" + urllib.parse.quote("http://dc.com") + "&status=resolved", "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["deleted"], 1)
+
+    def test_delete_all_requires_page_url_or_status(self):
+        code, body, _ = self._req("/api/comments", "DELETE")
+        self.assertEqual(code, 400)
+        self.assertIn("required", body["error"])
+
     def test_sse_stream(self):
         import http.client
 
