@@ -1,0 +1,14 @@
+{
+  "name": "awr-local",
+  "description": "Agent Web Review — local marketplace for project-level install",
+  "owner": {
+    "name": "chao"
+  },
+  "plugins": [
+    {
+      "name": "awr",
+      "source": "./",
+      "description": "Pull-model web review: /awr fetches comments, you fix code, resolve."
+    }
+  ]
+}
