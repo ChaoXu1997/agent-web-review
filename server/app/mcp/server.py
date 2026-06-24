@@ -27,13 +27,12 @@ Workflow:
 
 
 def create_mcp_server(app: FastAPI | None = None) -> FastMCP:
-    resolved_app = app if app is not None else _fallback_app()
-
     @asynccontextmanager
     async def mcp_lifespan(server: FastMCP) -> AsyncIterator[MCPLifespanContext]:
-        # The mounted sub-app shares the parent FastAPI app's state (storages).
-        # Capture `resolved_app` via closure rather than importing the global,
-        # so tests can pass an app directly without monkeypatching module state.
+        # Resolve at request time: production passes app=None and relies on the
+        # process-global _app (assigned at the end of create_app); tests pass app
+        # directly. Resolving here avoids reading _app before create_app finishes.
+        resolved_app = app if app is not None else _fallback_app()
         yield MCPLifespanContext(app=resolved_app)
 
     server = FastMCP(
