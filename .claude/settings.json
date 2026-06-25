@@ -6,7 +6,7 @@
     "awr-local": {
       "source": {
         "source": "directory",
-        "path": "/home/chao/projects/agent-web-review/awr-claude-plugin"
+        "path": "./awr-claude-plugin"
       }
     }
   }
